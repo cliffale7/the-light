@@ -7,6 +7,7 @@ import 'models/game_state.dart';
 import 'components/rebirth_sequence.dart';
 import 'components/sacrifice_ritual.dart';
 import 'components/journey_reflection_screen.dart';
+import 'services/save_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -35,17 +36,34 @@ class LastLightScreen extends StatefulWidget {
 
 class _LastLightScreenState extends State<LastLightScreen> {
   late LastLightGame game;
-  late GameState gameState;
+  GameState gameState = GameState(); // Initialize with default, will be replaced by load
   Timer? gameTimer;
   Timer? whisperTimer;
   bool showJourneyReflection = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     game = LastLightGame();
-    gameState = GameState();
+    _loadGameState();
+  }
 
+  Future<void> _loadGameState() async {
+    final loadedState = await SaveService.loadGameState();
+    if (mounted) {
+      setState(() {
+        gameState = loadedState ?? GameState();
+        game.updateLightPercent(gameState.lightPercent);
+        _isLoading = false;
+      });
+      
+      // Start game timer after loading
+      _startGameTimer();
+    }
+  }
+
+  void _startGameTimer() {
     // Game update loop
     gameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (mounted && !gameState.isRebirthing) {
@@ -68,10 +86,10 @@ class _LastLightScreenState extends State<LastLightScreen> {
               });
             }
           }
-          
+
           // Add whispers during low light
-          if (gameState.lightPercent < 20 && 
-              gameState.whispers.isEmpty && 
+          if (gameState.lightPercent < 20 &&
+              gameState.whispers.isEmpty &&
               Random().nextDouble() < 0.1) {
             gameState.addWhisper();
             Future.delayed(const Duration(seconds: 4), () {
@@ -82,9 +100,9 @@ class _LastLightScreenState extends State<LastLightScreen> {
               }
             });
           }
-          
+
           // Add whisper after sacrifice
-          if (gameState.isShowingSacrificeAftermath && 
+          if (gameState.isShowingSacrificeAftermath &&
               gameState.whispers.isEmpty) {
             Future.delayed(const Duration(milliseconds: 500), () {
               if (mounted) {
@@ -123,6 +141,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
   void dispose() {
     gameTimer?.cancel();
     whisperTimer?.cancel();
+    _saveGameState(); // Save on dispose
     super.dispose();
   }
 
@@ -131,19 +150,24 @@ class _LastLightScreenState extends State<LastLightScreen> {
       gameState.handleClick();
       game.updateLightPercent(gameState.lightPercent);
     });
+    // Auto-save periodically (every 10 clicks or so)
+    if (gameState.souls.floor() % 10 == 0) {
+      _saveGameState();
+    }
   }
 
   void _buyUpgrade(String type) {
     setState(() {
       if (gameState.buyUpgrade(type)) {
         game.updateLightPercent(gameState.lightPercent);
+        _saveGameState(); // Save after upgrade
       }
     });
   }
 
   void _sacrifice() {
     if (gameState.memories.isEmpty) return;
-    
+
     setState(() {
       gameState.startSacrificeRitual();
     });
@@ -160,6 +184,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
     setState(() {
       gameState.confirmSacrifice();
       game.updateLightPercent(gameState.lightPercent);
+      _saveGameState(); // Save after sacrifice
     });
   }
 
@@ -173,7 +198,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
     setState(() {
       gameState.completeSacrificeAftermath();
     });
-    
+
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
         setState(() {
@@ -189,6 +214,10 @@ class _LastLightScreenState extends State<LastLightScreen> {
     });
   }
 
+  Future<void> _saveGameState() async {
+    await SaveService.saveGameState(gameState);
+  }
+
   void _completeRebirth() {
     setState(() {
       gameState.reborn();
@@ -197,6 +226,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
       gameState.showMemory =
           "Cycle ${gameState.rebornCount} complete. You carry forward what you've learned.";
     });
+    _saveGameState(); // Save after rebirth
 
     Future.delayed(const Duration(seconds: 4), () {
       if (mounted) {
@@ -238,7 +268,6 @@ class _LastLightScreenState extends State<LastLightScreen> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -251,9 +280,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
         child: Stack(
           children: [
             // Flame game background
-            Positioned.fill(
-              child: GameWidget(game: game),
-            ),
+            Positioned.fill(child: GameWidget(game: game)),
 
             // Rebirth animation overlay
             if (gameState.isRebirthing)
@@ -303,7 +330,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
               final phase = gameState.phase;
               final intensity = (phase / 4.0).clamp(0.0, 1.0);
               final random = Random(index);
-              
+
               return Positioned(
                 top: 20 + (index * 10) * 4.0,
                 left: 10 + (random.nextDouble() * 80) * 4.0,
@@ -330,7 +357,9 @@ class _LastLightScreenState extends State<LastLightScreen> {
                             fontWeight: FontWeight.w300,
                             shadows: [
                               Shadow(
-                                color: Colors.red.shade900.withValues(alpha: 0.5 * intensity),
+                                color: Colors.red.shade900.withValues(
+                                  alpha: 0.5 * intensity,
+                                ),
                                 blurRadius: 4 * intensity,
                               ),
                             ],
@@ -373,44 +402,44 @@ class _LastLightScreenState extends State<LastLightScreen> {
 
             // Main UI
             if (!showJourneyReflection)
-            Positioned.fill(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Stats
-                    _buildStats(context),
+              Positioned.fill(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Stats
+                      _buildStats(context),
 
-                    const SizedBox(height: 16),
-
-                    // Main click area
-                    _buildClickButton(context),
-
-                    const SizedBox(height: 16),
-
-                    // Upgrades
-                    _buildUpgrades(context),
-
-                    // Dark choices
-                    if (gameState.memories.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      _buildSacrificeButton(context),
-                    ],
 
-                    // Rebirth button
-                    if (gameState.phase >= 4) ...[
+                      // Main click area
+                      _buildClickButton(context),
+
                       const SizedBox(height: 16),
-                      _buildRebirthButton(context),
-                    ],
 
-                    // Story text
-                    const SizedBox(height: 16),
-                    _buildStoryText(context),
-                  ],
+                      // Upgrades
+                      _buildUpgrades(context),
+
+                      // Dark choices
+                      if (gameState.memories.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _buildSacrificeButton(context),
+                      ],
+
+                      // Rebirth button
+                      if (gameState.phase >= 4) ...[
+                        const SizedBox(height: 16),
+                        _buildRebirthButton(context),
+                      ],
+
+                      // Story text
+                      const SizedBox(height: 16),
+                      _buildStoryText(context),
+                    ],
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -440,10 +469,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
                 const SizedBox(width: 8),
                 Text(
                   'The Light: ${gameState.light.floor()}/${gameState.maxLight.floor()}',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 20, color: Colors.white),
                 ),
               ],
             ),
@@ -452,11 +478,18 @@ class _LastLightScreenState extends State<LastLightScreen> {
                 if (gameState.rebornCount > 0)
                   Row(
                     children: [
-                      Icon(Icons.wb_sunny, size: 20, color: Colors.yellow.shade400),
+                      Icon(
+                        Icons.wb_sunny,
+                        size: 20,
+                        color: Colors.yellow.shade400,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Rebirths: ${gameState.rebornCount}',
-                        style: const TextStyle(fontSize: 18, color: Colors.white),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(width: 16),
                     ],
@@ -513,16 +546,16 @@ class _LastLightScreenState extends State<LastLightScreen> {
         ),
         if (gameState.phase > 0) ...[
           const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.warning, size: 20, color: Colors.red.shade400),
-                const SizedBox(width: 8),
-                Text(
-                  'Darkness Phase: ${gameState.phase}',
-                  style: TextStyle(color: Colors.red.shade400),
-                ),
-              ],
-            ),
+          Row(
+            children: [
+              Icon(Icons.warning, size: 20, color: Colors.red.shade400),
+              const SizedBox(width: 8),
+              Text(
+                'Darkness Phase: ${gameState.phase}',
+                style: TextStyle(color: Colors.red.shade400),
+              ),
+            ],
+          ),
         ],
       ],
     );
@@ -557,9 +590,12 @@ class _LastLightScreenState extends State<LastLightScreen> {
             ),
             boxShadow: [
               BoxShadow(
-                color: HSLColor.fromAHSL(1.0, 45, 1.0, 0.7)
-                    .toColor()
-                    .withValues(alpha: 0.5),
+                color: HSLColor.fromAHSL(
+                  1.0,
+                  45,
+                  1.0,
+                  0.7,
+                ).toColor().withValues(alpha: 0.5),
                 blurRadius: lightPercent / 5,
               ),
             ],
@@ -579,8 +615,10 @@ class _LastLightScreenState extends State<LastLightScreen> {
     final autoCost = (50 * pow(2, gameState.autoGather)).floor();
     final capacityCost = (100 * pow(2, gameState.maxLight / 100 - 1)).floor();
     final memoryCost = 200 + (gameState.memories.length * 100);
-    final canBuyMemory = gameState.memories.length < GameState.memoryBank.length;
-    final currentClickPower = gameState.clickPower * (1 + gameState.rebornCount * 0.5);
+    final canBuyMemory =
+        gameState.memories.length < GameState.memoryBank.length;
+    final currentClickPower =
+        gameState.clickPower * (1 + gameState.rebornCount * 0.5);
 
     return GridView.count(
       crossAxisCount: 2,
@@ -635,7 +673,8 @@ class _LastLightScreenState extends State<LastLightScreen> {
           Colors.cyan.shade900,
           gameState.souls >= memoryCost && canBuyMemory,
           () => _buyUpgrade('memory'),
-          indicator: '${gameState.memories.length}/${GameState.memoryBank.length}',
+          indicator:
+              '${gameState.memories.length}/${GameState.memoryBank.length}',
           indicatorColor: Colors.cyan.shade700,
         ),
       ],
@@ -691,8 +730,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: (indicatorColor ?? color)
-                          .withValues(alpha: 0.5),
+                      color: (indicatorColor ?? color).withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -714,10 +752,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
             const SizedBox(height: 4),
             Text(
               cost,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey.shade400,
-              ),
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
             ),
           ],
         ),
@@ -759,10 +794,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
             const SizedBox(height: 4),
             Text(
               '+100 max light, +5 click power, +darkness',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey.shade400,
-              ),
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
             ),
           ],
         ),
@@ -814,10 +846,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
             const SizedBox(height: 4),
             Text(
               'Cost: 1000 souls | Rebirths grant permanent bonuses',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey.shade300,
-              ),
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade300),
               textAlign: TextAlign.center,
             ),
           ],
@@ -839,8 +868,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
         storyText = "You're tired. So tired. But you can't stop. Not yet.";
         break;
       case 3:
-        storyText =
-            "What are you even fighting for? Does it matter anymore?";
+        storyText = "What are you even fighting for? Does it matter anymore?";
         break;
       case 4:
         storyText =
@@ -850,10 +878,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
 
     return Text(
       storyText,
-      style: TextStyle(
-        fontSize: 14,
-        color: Colors.grey.shade400,
-      ),
+      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
       textAlign: TextAlign.center,
     );
   }

@@ -85,7 +85,7 @@ The sacrifice mechanic is the heart of the game's meaning - "how much of ourselv
 
 #### 1.4 Persistent Memory Tracking
 - [x] **Data structure** to track all sacrificed memories across all cycles
-- [ ] **Save system** integration to persist this data (pending save system implementation)
+- [x] **Save system** integration to persist this data ✅ COMPLETE
 - [x] **Memory tracking** - `allSacrificedMemories` list and `totalMemoriesSacrificed` counter
 
 ---
@@ -235,10 +235,10 @@ The sacrifice mechanic is the heart of the game's meaning - "how much of ourselv
 ### Part 4: Supporting Systems
 
 #### 4.1 Persistent Data Tracking
-- [ ] **Save system** for journey statistics
-- [ ] **Cross-cycle memory tracking**
-- [ ] **Statistics persistence**
-- [ ] **Data migration** (if save format changes)
+- [x] **Save system** for journey statistics ✅ COMPLETE
+- [x] **Cross-cycle memory tracking** ✅ COMPLETE
+- [x] **Statistics persistence** ✅ COMPLETE
+- [x] **Data migration** (version system in place, migration logic can be added as needed)
 
 #### 4.2 Visual Polish for Choices
 - [ ] **Memory cards** - visual representation of memories
@@ -363,10 +363,11 @@ This update succeeds if:
 ### 4. Persistence & Meta-Progression
 **Priority: MEDIUM** - Support the "eternal return" theme
 
-- [ ] **Save system**
-  - [ ] Save game state locally
-  - [ ] Persist across app restarts
-  - [ ] Save rebirth count, total sacrifices, etc.
+- [x] **Save system** ✅ COMPLETE
+  - [x] Save game state locally (using shared_preferences)
+  - [x] Persist across app restarts
+  - [x] Save rebirth count, total sacrifices, memories, etc.
+  - [x] Auto-save on upgrades, sacrifices, rebirths, and app close
 
 - [ ] **Statistics tracking**
   - [ ] Total cycles completed
