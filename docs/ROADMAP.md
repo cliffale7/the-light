@@ -282,6 +282,138 @@ This update succeeds if:
 
 ---
 
+## 🎯 SECOND MAJOR UPDATE: "EXTENDED JOURNEY & ACTIVE ENGAGEMENT"
+
+**Priority: HIGH** - Extends play time while ensuring active engagement
+
+**Status: ✅ COMPLETE** - Generators and special items implemented, active engagement mechanics added
+
+### Overview
+This update extends the game's play time through new generators and special items, while ensuring players remain actively engaged rather than idling passively.
+
+---
+
+### Part 1: New Generators ⚙️
+
+**Status: ✅ COMPLETE**
+
+#### 1.1 The Keeper
+- [x] **Reduces decay rate** by 10% per level (max 50% reduction)
+- [x] **Cost scaling**: 200 * 2^(decayResistance * 10)
+- [x] **Purpose**: Helps players survive longer, but doesn't eliminate the struggle
+- [x] **Balance**: Maximum 50% reduction means decay still happens - the darkness still comes
+
+#### 1.2 Memory Resonance
+- [x] **Passive memory generation** - 1 memory per 5 minutes per level (max 3 levels)
+- [x] **Active engagement requirement**: Only progresses when light > 20%
+- [x] **Cost scaling**: 500 * 3^memoryResonance
+- [x] **Purpose**: Rewards active play with passive benefits, but requires maintenance
+
+---
+
+### Part 2: Special Items 🎁
+
+**Status: ✅ COMPLETE** - All three items implemented with active engagement mechanics
+
+#### 2.1 The Mirror
+- [x] **One-time purchase**: 1000 souls
+- [x] **Active ability**: See your reflection, gain insight (soul bonus based on journey)
+- [x] **Cooldown**: 5 minutes
+- [x] **Reflection text**: Context-aware based on sacrifices vs preserved memories
+- [x] **Purpose**: Moment of reflection, not passive protection
+
+#### 2.2 The Compass
+- [x] **One-time purchase**: 1500 souls
+- [x] **Passive effect**: Reduces whisper frequency by 25%
+- [x] **Active ability**: Clear all whispers, find direction
+- [x] **Cooldown**: 3 minutes
+- [x] **Purpose**: Helps navigate the darkness, but doesn't eliminate it
+
+#### 2.3 The Lantern ⚠️ CRITICAL FIX
+- [x] **One-time purchase**: 2000 souls
+- [x] **Active ability**: Restore light to 50%, provides 30-second grace period (50% decay reduction)
+- [x] **Cooldown**: 10 minutes
+- [x] **CRITICAL FIX**: Removed passive "light never drops below 10%" - this broke phase progression
+- [x] **New mechanic**: Temporary respite, not permanent protection
+- [x] **Purpose**: Hope that can be renewed, but the darkness always returns
+
+**Why the fix was necessary:**
+- Original design prevented light from dropping below 10% passively
+- This blocked phase transitions (which require light <= 0)
+- Players could never reach phase 6, never be reborn
+- Completely broke the core game loop
+- **Solution**: Lantern now only provides temporary grace period when actively used
+
+---
+
+### Part 3: Active Engagement Mechanics 🎯
+
+**Status: ✅ COMPLETE** - Mechanisms to prevent pure idle play
+
+#### 3.1 Auto-Gather Diminishing Returns
+- [x] **Auto-gather efficiency**: 50% of active clicking
+- [x] **Purpose**: Rewards active play, discourages pure idle
+- [x] **Balance**: Still useful, but clicking is always better
+
+#### 3.2 Memory Resonance Active Requirement
+- [x] **Requirement**: Only progresses when light > 20%
+- [x] **Purpose**: Players must actively maintain their light to receive passive memories
+- [x] **Balance**: Passive benefit requires active engagement
+
+#### 3.3 Phase Progression Always Possible
+- [x] **Critical mechanic**: Light can always reach 0, phase transitions always possible
+- [x] **No permanent protection**: All special items provide temporary respite, not permanent safety
+- [x] **Purpose**: The darkness must always be able to consume - this is the core struggle
+
+#### 3.4 Extended Phases
+- [x] **Phases extended**: 0-6 instead of 0-4
+- [x] **Slower decay**: 40% reduction in base decay rate
+- [x] **Higher rebirth cost**: 2000 + (rebornCount * 500) souls
+- [x] **Purpose**: Longer journey, more meaningful choices, but still requires active engagement
+
+---
+
+### Part 4: Future Active Engagement Enhancements 🔮
+
+**Status: ⏳ PENDING** - Ideas for further ensuring active engagement
+
+#### 4.1 Decay Scaling with Time Away
+- [ ] **Mechanic**: Decay increases slightly if player is away for extended periods
+- [ ] **Purpose**: Encourages regular check-ins, prevents "set it and forget it"
+- [ ] **Balance**: Not punitive, just encourages engagement
+
+#### 4.2 Active Events
+- [ ] **Random events**: Occasional choices that require active response
+- [ ] **Examples**: "A memory surfaces - do you hold it or let it pass?"
+- [ ] **Purpose**: Breaks up passive play, creates moments of choice
+
+#### 4.3 Click Power Scaling
+- [ ] **Mechanic**: Click power slightly increases with consecutive active clicks
+- [ ] **Decay**: Bonus decays if player stops clicking
+- [ ] **Purpose**: Rewards sustained active play
+
+#### 4.4 Whisper Intensity Scaling
+- [ ] **Mechanic**: Whispers become more frequent/intense if player is idle
+- [ ] **Purpose**: The darkness grows stronger when you're not paying attention
+
+---
+
+### Implementation Notes
+
+**Key Design Principles:**
+1. **No permanent protection** - The darkness must always be able to consume
+2. **Active engagement required** - Passive benefits require active maintenance
+3. **Temporary respite, not permanent safety** - Special items provide moments of hope, not elimination of struggle
+4. **The struggle is the point** - All mechanics must preserve the core meditation on persistence
+
+**Balance Considerations:**
+- Generators help but don't eliminate the struggle
+- Special items provide tools but not solutions
+- Passive benefits require active engagement
+- The darkness always returns - this is the game's core truth
+
+---
+
 ## 📋 HIGH PRIORITY - Core Experience Enhancement
 
 ### 1. Emotional Impact & Narrative Depth
