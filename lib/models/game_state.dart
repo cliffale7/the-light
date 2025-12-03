@@ -16,6 +16,17 @@ class GameState {
   List<String> whispers = [];
   int rebornCount = 0;
   bool isRebirthing = false;
+  
+  // Persistent tracking across all cycles
+  List<String> allSacrificedMemories = [];
+  int totalMemoriesSacrificed = 0;
+  int totalMemoriesPreserved = 0;
+  
+  // Sacrifice ritual state
+  String? memoryToSacrifice;
+  bool isShowingMemoryPreview = false;
+  bool isShowingSacrificeConfirmation = false;
+  bool isShowingSacrificeAftermath = false;
 
   static const List<String> memoryBank = [
     "A child's laughter echoes...",
@@ -39,6 +50,40 @@ class GameState {
     "Give in...",
     "Stop trying...",
     "Embrace the end..."
+  ];
+
+  // Context-aware whisper pools
+  static const List<String> manySacrificesWhispers = [
+    "You've given up so much already... why keep going?",
+    "How many memories is enough? When do you stop?",
+    "You're burning yourself away. What's left?",
+    "Was it worth it? Do you even remember what you lost?",
+    "Another one gone. How many more?",
+    "You've sacrificed everything that mattered. Why continue?",
+  ];
+
+  static const List<String> fewSacrificesWhispers = [
+    "You're holding on too tight. Let go. It's easier.",
+    "Those memories are weighing you down. Burn them.",
+    "You could be stronger. You choose to be weak.",
+    "Why suffer when you could just let go?",
+    "Your memories are chains. Break them.",
+  ];
+
+  static const List<String> highCycleWhispers = [
+    "How many times will you do this? When does it end?",
+    "You've done this before. Nothing changes.",
+    "The cycle repeats. Nothing matters.",
+    "Again? Really? When will you learn?",
+    "You're stuck. This is all there is.",
+  ];
+
+  static const List<String> lowLightWhispers = [
+    "This is it. This time, just let it fade.",
+    "You're tired. You've earned the rest.",
+    "It's okay to stop. Really. It's okay.",
+    "Just let go. It's easier.",
+    "The darkness is calling. Answer it.",
   ];
 
   double get lightPercent => (light / maxLight) * 100;
@@ -107,15 +152,45 @@ class GameState {
     return true;
   }
 
-  void sacrifice() {
-    if (memories.isEmpty) return;
+  String? getMemoryToSacrifice() {
+    if (memories.isEmpty) return null;
+    return memories.last;
+  }
 
-    final sacrificedMemory = memories.removeLast();
+  void startSacrificeRitual() {
+    if (memories.isEmpty) return;
+    memoryToSacrifice = memories.last;
+    isShowingMemoryPreview = true;
+  }
+
+  void confirmSacrifice() {
+    if (memoryToSacrifice == null || memories.isEmpty) return;
+
+    final sacrificedMemory = memoryToSacrifice!;
+    memories.removeLast();
     sacrifices++;
+    totalMemoriesSacrificed++;
+    allSacrificedMemories.add(sacrificedMemory);
+    
     maxLight += 100;
     clickPower += 5;
     darkness = (darkness + 10).clamp(0, 100);
-    showMemory = "You sacrificed: $sacrificedMemory";
+    
+    isShowingMemoryPreview = false;
+    isShowingSacrificeConfirmation = false;
+    isShowingSacrificeAftermath = true;
+    memoryToSacrifice = null;
+  }
+
+  void cancelSacrifice() {
+    memoryToSacrifice = null;
+    isShowingMemoryPreview = false;
+    isShowingSacrificeConfirmation = false;
+  }
+
+  void completeSacrificeAftermath() {
+    isShowingSacrificeAftermath = false;
+    showMemory = "The memory is gone. The power remains.";
   }
 
   void reborn() {
@@ -128,15 +203,53 @@ class GameState {
       clickPower = 1;
       autoGather = 0;
       phase = 0;
+      
+      // Track preserved memories before clearing
+      totalMemoriesPreserved += memories.length;
+      
       memories.clear();
       sacrifices = 0;
       darkness = (darkness - 50).clamp(0, 100);
+      
+      // Reset sacrifice ritual state
+      memoryToSacrifice = null;
+      isShowingMemoryPreview = false;
+      isShowingSacrificeConfirmation = false;
+      isShowingSacrificeAftermath = false;
     }
   }
 
   void addWhisper() {
-    if (whisperBank.isNotEmpty) {
-      whispers.add(whisperBank[_random.nextInt(whisperBank.length)]);
+    String? whisper;
+    
+    // Context-aware whisper selection
+    final totalSacrificed = totalMemoriesSacrificed;
+    final currentMemories = memories.length;
+    
+    // Determine context
+    final hasManySacrifices = totalSacrificed >= 3;
+    final hasFewSacrifices = totalSacrificed == 0 && currentMemories > 0;
+    final hasHighCycles = rebornCount >= 3;
+    final hasLowLight = lightPercent < 20;
+    final justSacrificed = isShowingSacrificeAftermath;
+    
+    // Priority order: recent sacrifice > low light > many sacrifices > high cycles > few sacrifices > default
+    if (justSacrificed && manySacrificesWhispers.isNotEmpty) {
+      whisper = manySacrificesWhispers[_random.nextInt(manySacrificesWhispers.length)];
+    } else if (hasLowLight && lowLightWhispers.isNotEmpty) {
+      whisper = lowLightWhispers[_random.nextInt(lowLightWhispers.length)];
+    } else if (hasManySacrifices && manySacrificesWhispers.isNotEmpty) {
+      whisper = manySacrificesWhispers[_random.nextInt(manySacrificesWhispers.length)];
+    } else if (hasHighCycles && highCycleWhispers.isNotEmpty) {
+      whisper = highCycleWhispers[_random.nextInt(highCycleWhispers.length)];
+    } else if (hasFewSacrifices && fewSacrificesWhispers.isNotEmpty) {
+      whisper = fewSacrificesWhispers[_random.nextInt(fewSacrificesWhispers.length)];
+    } else if (whisperBank.isNotEmpty) {
+      whisper = whisperBank[_random.nextInt(whisperBank.length)];
+    }
+    
+    if (whisper != null) {
+      whispers.add(whisper);
     }
   }
 

@@ -5,6 +5,8 @@ import 'dart:math';
 import 'game/last_light_game.dart';
 import 'models/game_state.dart';
 import 'components/rebirth_sequence.dart';
+import 'components/sacrifice_ritual.dart';
+import 'components/journey_reflection_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,6 +38,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
   late GameState gameState;
   Timer? gameTimer;
   Timer? whisperTimer;
+  bool showJourneyReflection = false;
 
   @override
   void initState() {
@@ -51,12 +54,49 @@ class _LastLightScreenState extends State<LastLightScreen> {
           game.updateLightPercent(gameState.lightPercent);
 
           // Check for phase transitions and whispers
-          if (phaseTransitioned && Random().nextDouble() < 0.3) {
+          if (phaseTransitioned) {
+            // Increased whisper frequency in later phases
+            final whisperChance = 0.3 + (gameState.phase * 0.15);
+            if (Random().nextDouble() < whisperChance) {
+              gameState.addWhisper();
+              Future.delayed(const Duration(seconds: 3), () {
+                if (mounted) {
+                  setState(() {
+                    gameState.removeWhisper();
+                  });
+                }
+              });
+            }
+          }
+          
+          // Add whispers during low light
+          if (gameState.lightPercent < 20 && 
+              gameState.whispers.isEmpty && 
+              Random().nextDouble() < 0.1) {
             gameState.addWhisper();
-            Future.delayed(const Duration(seconds: 3), () {
+            Future.delayed(const Duration(seconds: 4), () {
               if (mounted) {
                 setState(() {
                   gameState.removeWhisper();
+                });
+              }
+            });
+          }
+          
+          // Add whisper after sacrifice
+          if (gameState.isShowingSacrificeAftermath && 
+              gameState.whispers.isEmpty) {
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                setState(() {
+                  gameState.addWhisper();
+                });
+                Future.delayed(const Duration(seconds: 3), () {
+                  if (mounted) {
+                    setState(() {
+                      gameState.removeWhisper();
+                    });
+                  }
                 });
               }
             });
@@ -70,7 +110,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
       if (mounted && gameState.showMemory != null) {
         Future.delayed(const Duration(seconds: 4), () {
           if (mounted) {
-            setState(() {
+    setState(() {
               gameState.showMemory = null;
             });
           }
@@ -102,10 +142,38 @@ class _LastLightScreenState extends State<LastLightScreen> {
   }
 
   void _sacrifice() {
+    if (gameState.memories.isEmpty) return;
+    
     setState(() {
-      gameState.sacrifice();
+      gameState.startSacrificeRitual();
+    });
+  }
+
+  void _continueFromMemoryPreview() {
+    setState(() {
+      gameState.isShowingMemoryPreview = false;
+      gameState.isShowingSacrificeConfirmation = true;
+    });
+  }
+
+  void _confirmSacrifice() {
+    setState(() {
+      gameState.confirmSacrifice();
       game.updateLightPercent(gameState.lightPercent);
     });
+  }
+
+  void _cancelSacrifice() {
+    setState(() {
+      gameState.cancelSacrifice();
+    });
+  }
+
+  void _completeSacrificeAftermath() {
+    setState(() {
+      gameState.completeSacrificeAftermath();
+    });
+    
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
         setState(() {
@@ -136,6 +204,12 @@ class _LastLightScreenState extends State<LastLightScreen> {
           gameState.showMemory = null;
         });
       }
+    });
+  }
+
+  void _toggleJourneyReflection() {
+    setState(() {
+      showJourneyReflection = !showJourneyReflection;
     });
   }
 
@@ -192,20 +266,79 @@ class _LastLightScreenState extends State<LastLightScreen> {
                 ),
               ),
 
-            // Whispers
+            // Sacrifice Ritual Overlays
+            if (gameState.isShowingMemoryPreview &&
+                gameState.memoryToSacrifice != null)
+              Positioned.fill(
+                child: MemoryPreviewOverlay(
+                  memory: gameState.memoryToSacrifice!,
+                  onContinue: _continueFromMemoryPreview,
+                  onCancel: _cancelSacrifice,
+                ),
+              ),
+
+            if (gameState.isShowingSacrificeConfirmation &&
+                gameState.memoryToSacrifice != null)
+              Positioned.fill(
+                child: SacrificeConfirmationDialog(
+                  memory: gameState.memoryToSacrifice!,
+                  onConfirm: _confirmSacrifice,
+                  onCancel: _cancelSacrifice,
+                ),
+              ),
+
+            if (gameState.isShowingSacrificeAftermath &&
+                gameState.allSacrificedMemories.isNotEmpty)
+              Positioned.fill(
+                child: SacrificeAftermath(
+                  memory: gameState.allSacrificedMemories.last,
+                  onComplete: _completeSacrificeAftermath,
+                ),
+              ),
+
+            // Whispers with enhanced visual effects
             ...gameState.whispers.asMap().entries.map((entry) {
               final index = entry.key;
               final whisper = entry.value;
+              final phase = gameState.phase;
+              final intensity = (phase / 4.0).clamp(0.0, 1.0);
+              final random = Random(index);
+              
               return Positioned(
                 top: 20 + (index * 10) * 4.0,
-                left: 10 + (Random().nextDouble() * 80) * 4.0,
-                child: Text(
-                  whisper,
-                  style: TextStyle(
-                    color: Colors.red.shade500,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w300,
-                  ),
+                left: 10 + (random.nextDouble() * 80) * 4.0,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(milliseconds: 1000),
+                  builder: (context, value, child) {
+                    return Opacity(
+                      opacity: value,
+                      child: Transform.translate(
+                        offset: Offset(
+                          (random.nextDouble() - 0.5) * 2 * (1 - value),
+                          (random.nextDouble() - 0.5) * 2 * (1 - value),
+                        ),
+                        child: Text(
+                          whisper,
+                          style: TextStyle(
+                            color: Color.lerp(
+                              Colors.red.shade500,
+                              Colors.red.shade900,
+                              intensity,
+                            ),
+                            fontSize: 14 + (intensity * 2),
+                            fontWeight: FontWeight.w300,
+                            shadows: [
+                              Shadow(
+                                color: Colors.red.shade900.withValues(alpha: 0.5 * intensity),
+                                blurRadius: 4 * intensity,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               );
             }),
@@ -229,7 +362,17 @@ class _LastLightScreenState extends State<LastLightScreen> {
                 ),
               ),
 
+            // Journey Reflection Screen
+            if (showJourneyReflection)
+              Positioned.fill(
+                child: JourneyReflectionScreen(
+                  gameState: gameState,
+                  onClose: _toggleJourneyReflection,
+                ),
+              ),
+
             // Main UI
+            if (!showJourneyReflection)
             Positioned.fill(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -304,17 +447,34 @@ class _LastLightScreenState extends State<LastLightScreen> {
                 ),
               ],
             ),
-            if (gameState.rebornCount > 0)
-              Row(
-                children: [
-                  Icon(Icons.wb_sunny, size: 20, color: Colors.yellow.shade400),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Rebirths: ${gameState.rebornCount}',
-                    style: const TextStyle(fontSize: 18, color: Colors.white),
+            Row(
+              children: [
+                if (gameState.rebornCount > 0)
+                  Row(
+                    children: [
+                      Icon(Icons.wb_sunny, size: 20, color: Colors.yellow.shade400),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Rebirths: ${gameState.rebornCount}',
+                        style: const TextStyle(fontSize: 18, color: Colors.white),
+                      ),
+                      const SizedBox(width: 16),
+                    ],
                   ),
-                ],
-              ),
+                // Your Journey button
+                IconButton(
+                  onPressed: _toggleJourneyReflection,
+                  icon: Icon(
+                    Icons.local_florist,
+                    color: Colors.yellow.shade300,
+                    size: 24,
+                  ),
+                  tooltip: 'Your Journey',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -631,7 +791,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
         child: Column(
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.wb_sunny, size: 24, color: Colors.white),
                 const SizedBox(width: 8),
