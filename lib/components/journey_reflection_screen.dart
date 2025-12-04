@@ -65,6 +65,7 @@ class JourneyReflectionScreen extends StatelessWidget {
             // Scrollable content
             Expanded(
               child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

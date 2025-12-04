@@ -34,7 +34,7 @@ class LastLightScreen extends StatefulWidget {
   State<LastLightScreen> createState() => _LastLightScreenState();
 }
 
-class _LastLightScreenState extends State<LastLightScreen> {
+class _LastLightScreenState extends State<LastLightScreen> with TickerProviderStateMixin {
   late LastLightGame game;
   GameState gameState =
       GameState(); // Initialize with default, will be replaced by load
@@ -43,11 +43,13 @@ class _LastLightScreenState extends State<LastLightScreen> {
   bool showJourneyReflection = false;
   bool showSpecialItems = false;
   bool showShop = false;
+  late TabController _shopTabController;
 
   @override
   void initState() {
     super.initState();
     game = LastLightGame();
+    _shopTabController = TabController(length: 2, vsync: this);
     _loadGameState();
   }
 
@@ -142,6 +144,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
   void dispose() {
     gameTimer?.cancel();
     whisperTimer?.cancel();
+    _shopTabController.dispose();
     _saveGameState(); // Save on dispose
     super.dispose();
   }
@@ -269,8 +272,21 @@ class _LastLightScreenState extends State<LastLightScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
+    return PopScope(
+      canPop: !showShop && !showSpecialItems && !showJourneyReflection,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        // Handle back button - close overlays in order of priority
+        if (showJourneyReflection) {
+          setState(() => showJourneyReflection = false);
+        } else if (showShop) {
+          setState(() => showShop = false);
+        } else if (showSpecialItems) {
+          setState(() => showSpecialItems = false);
+        }
+      },
+      child: Scaffold(
+        body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -330,42 +346,39 @@ class _LastLightScreenState extends State<LastLightScreen> {
               final whisper = entry.value;
               final phase = gameState.phase;
               final intensity = (phase / 4.0).clamp(0.0, 1.0);
-              final random = Random(index);
 
               return Positioned(
-                top: 20 + (index * 10) * 4.0,
-                left: 10 + (random.nextDouble() * 80) * 4.0,
+                top: MediaQuery.of(context).padding.top + 60 + (index * 30),
+                left: 16,
+                right: 16,
                 child: TweenAnimationBuilder<double>(
                   tween: Tween(begin: 0.0, end: 1.0),
                   duration: const Duration(milliseconds: 1000),
                   builder: (context, value, child) {
                     return Opacity(
                       opacity: value,
-                      child: Transform.translate(
-                        offset: Offset(
-                          (random.nextDouble() - 0.5) * 2 * (1 - value),
-                          (random.nextDouble() - 0.5) * 2 * (1 - value),
-                        ),
-                        child: Text(
-                          whisper,
-                          style: TextStyle(
-                            color: Color.lerp(
-                              Colors.red.shade500,
-                              Colors.red.shade900,
-                              intensity,
-                            ),
-                            fontSize: 14 + (intensity * 2),
-                            fontWeight: FontWeight.w300,
-                            shadows: [
-                              Shadow(
-                                color: Colors.red.shade900.withValues(
-                                  alpha: 0.5 * intensity,
-                                ),
-                                blurRadius: 4 * intensity,
-                              ),
-                            ],
+                      child: Text(
+                        whisper,
+                        style: TextStyle(
+                          color: Color.lerp(
+                            Colors.red.shade500,
+                            Colors.red.shade900,
+                            intensity,
                           ),
+                          fontSize: 16 + (intensity * 2),
+                          fontWeight: FontWeight.w400,
+                          shadows: [
+                            Shadow(
+                              color: Colors.red.shade900.withValues(
+                                alpha: 0.5 * intensity,
+                              ),
+                              blurRadius: 4 * intensity,
+                            ),
+                          ],
                         ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     );
                   },
@@ -404,57 +417,52 @@ class _LastLightScreenState extends State<LastLightScreen> {
             // Main UI
             if (!showJourneyReflection && !showShop)
               Positioned.fill(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return SingleChildScrollView(
-                      padding: const EdgeInsets.all(12),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                        child: IntrinsicHeight(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Stats (compact)
-                              _buildStats(context),
+                child: SafeArea(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Stats (compact)
+                        _buildStats(context),
 
-                              const SizedBox(height: 8),
+                        const SizedBox(height: 4),
 
-                              // Main click area (smaller)
-                              _buildClickButton(context, compact: true),
+                        // Main click area (smaller)
+                        _buildClickButton(context, compact: true),
 
-                              const SizedBox(height: 8),
+                        const SizedBox(height: 4),
 
-                              // Upgrades (compact grid)
-                              _buildUpgrades(context, compact: true),
+                      // Upgrades (compact grid)
+                      _buildUpgrades(context, compact: true),
 
-                              // Action buttons row
-                              Row(
-                                children: [
-                                  // Sacrifice button
-                                  if (gameState.memories.isNotEmpty)
-                                    Expanded(
-                                      child: _buildSacrificeButton(context, compact: true),
-                                    ),
-                                  if (gameState.memories.isNotEmpty && gameState.phase >= 6)
-                                    const SizedBox(width: 8),
-                                  // Rebirth button
-                                  if (gameState.phase >= 6)
-                                    Expanded(
-                                      child: _buildRebirthButton(context, compact: true),
-                                    ),
-                                ],
+                      const SizedBox(height: 4),
+
+                      // Action buttons row
+                        Row(
+                          children: [
+                            // Sacrifice button
+                            if (gameState.memories.isNotEmpty)
+                              Expanded(
+                                child: _buildSacrificeButton(context, compact: true),
                               ),
-
-                              // Story text (compact)
-                              const SizedBox(height: 8),
-                              _buildStoryText(context, compact: true),
-                            ],
-                          ),
+                            if (gameState.memories.isNotEmpty && gameState.phase >= 6)
+                              const SizedBox(width: 8),
+                            // Rebirth button
+                            if (gameState.phase >= 6)
+                              Expanded(
+                                child: _buildRebirthButton(context, compact: true),
+                              ),
+                          ],
                         ),
-                      ),
-                    );
-                  },
+
+                        // Story text (compact)
+                        const SizedBox(height: 4),
+                        _buildStoryText(context, compact: true),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             
@@ -471,18 +479,13 @@ class _LastLightScreenState extends State<LastLightScreen> {
                   onTap: () => setState(() => showSpecialItems = false),
                   child: Container(
                     color: Colors.black.withValues(alpha: 0.5),
-                    child: GestureDetector(
-                      onTap: () {}, // Prevent tap from closing when tapping drawer
-                      child: Align(
-                        alignment: Alignment.bottomCenter,
-                        child: _buildSpecialItemsDrawer(context),
-                      ),
-                    ),
+                    child: _buildSpecialItemsDrawer(context),
                   ),
                 ),
               ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -499,7 +502,7 @@ class _LastLightScreenState extends State<LastLightScreen> {
               children: [
                 Icon(
                   Icons.local_fire_department,
-                  size: 24,
+                  size: 18,
                   color: HSLColor.fromAHSL(
                     1.0,
                     45,
@@ -507,10 +510,10 @@ class _LastLightScreenState extends State<LastLightScreen> {
                     lightPercent / 100,
                   ).toColor(),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Text(
-                  'The Light: ${gameState.light.floor()}/${gameState.maxLight.floor()}',
-                  style: const TextStyle(fontSize: 20, color: Colors.white),
+                  '${gameState.light.floor()}/${gameState.maxLight.floor()}',
+                  style: const TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -521,18 +524,18 @@ class _LastLightScreenState extends State<LastLightScreen> {
                     children: [
                       Icon(
                         Icons.wb_sunny,
-                        size: 20,
+                        size: 16,
                         color: Colors.yellow.shade400,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
                       Text(
-                        'Rebirths: ${gameState.rebornCount}',
+                        '${gameState.rebornCount}',
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 14,
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 8),
                     ],
                   ),
                 // Store button
@@ -541,13 +544,13 @@ class _LastLightScreenState extends State<LastLightScreen> {
                   icon: Icon(
                     Icons.store,
                     color: Colors.blue.shade300,
-                    size: 24,
+                    size: 20,
                   ),
                   tooltip: 'Store',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
                 // Special Items button
                 IconButton(
                   onPressed: () => setState(() => showSpecialItems = true),
@@ -556,15 +559,15 @@ class _LastLightScreenState extends State<LastLightScreen> {
                       Icon(
                         Icons.inventory_2,
                         color: Colors.purple.shade300,
-                        size: 24,
+                        size: 20,
                       ),
                       if (gameState.hasMirror || gameState.hasCompass || gameState.hasLantern)
                         Positioned(
                           right: 0,
                           top: 0,
                           child: Container(
-                            width: 8,
-                            height: 8,
+                            width: 6,
+                            height: 6,
                             decoration: const BoxDecoration(
                               color: Colors.orange,
                               shape: BoxShape.circle,
@@ -577,14 +580,14 @@ class _LastLightScreenState extends State<LastLightScreen> {
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
                 // Your Journey button
                 IconButton(
                   onPressed: _toggleJourneyReflection,
                   icon: Icon(
                     Icons.local_florist,
                     color: Colors.yellow.shade300,
-                    size: 24,
+                    size: 20,
                   ),
                   tooltip: 'Your Journey',
                   padding: EdgeInsets.zero,
@@ -594,12 +597,12 @@ class _LastLightScreenState extends State<LastLightScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Container(
-          height: 16,
+          height: 12,
           decoration: BoxDecoration(
             color: Colors.grey.shade800,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft,
@@ -612,31 +615,31 @@ class _LastLightScreenState extends State<LastLightScreen> {
                     HSLColor.fromAHSL(1.0, 30, 1.0, 0.5).toColor(),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         Row(
           children: [
-            Icon(Icons.favorite, size: 20, color: Colors.blue.shade400),
-            const SizedBox(width: 8),
+            Icon(Icons.favorite, size: 16, color: Colors.blue.shade400),
+            const SizedBox(width: 6),
             Text(
               'Souls: ${gameState.souls.floor()}',
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ],
         ),
         if (gameState.phase > 0) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Row(
             children: [
-              Icon(Icons.warning, size: 20, color: Colors.red.shade400),
-              const SizedBox(width: 8),
+              Icon(Icons.warning, size: 16, color: Colors.red.shade400),
+              const SizedBox(width: 6),
               Text(
-                'Darkness Phase: ${gameState.phase}',
-                style: TextStyle(color: Colors.red.shade400),
+                'Phase: ${gameState.phase}',
+                style: TextStyle(color: Colors.red.shade400, fontSize: 14),
               ),
             ],
           ),
@@ -794,111 +797,6 @@ class _LastLightScreenState extends State<LastLightScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        // Special Items Section
-        if (!gameState.hasMirror ||
-            !gameState.hasCompass ||
-            !gameState.hasLantern)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Special Items',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (!gameState.hasMirror)
-                _buildSpecialItemButton(
-                  context,
-                  'The Mirror',
-                  'See your reflection, gain insight',
-                  'Cost: 1000 souls',
-                  Icons.auto_awesome,
-                  Colors.amber.shade900,
-                  gameState.souls >= 1000,
-                  () => _buyUpgrade('mirror'),
-                ),
-              if (!gameState.hasCompass)
-                _buildSpecialItemButton(
-                  context,
-                  'The Compass',
-                  'Find direction, quiet the voices',
-                  'Cost: 1500 souls',
-                  Icons.explore,
-                  Colors.indigo.shade900,
-                  gameState.souls >= 1500,
-                  () => _buyUpgrade('compass'),
-                ),
-              if (!gameState.hasLantern)
-                _buildSpecialItemButton(
-                  context,
-                  'The Lantern',
-                  'Hope that never fully dies',
-                  'Cost: 2000 souls',
-                  Icons.light_mode,
-                  Colors.orange.shade900,
-                  gameState.souls >= 2000,
-                  () => _buyUpgrade('lantern'),
-                ),
-            ],
-          ),
-        // Special Item Usage Buttons
-        if (gameState.hasMirror || gameState.hasCompass || gameState.hasLantern)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 16),
-              const Text(
-                'Use Special Items',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (gameState.hasMirror)
-                _buildSpecialItemUseButton(
-                  context,
-                  'The Mirror',
-                  gameState.canUseMirror(),
-                  gameState.mirrorLastUsed != null
-                      ? 'Cooldown: ${5 - DateTime.now().difference(gameState.mirrorLastUsed!).inMinutes} min'
-                      : 'Ready',
-                  Icons.auto_awesome,
-                  Colors.amber.shade700,
-                  () => _useMirror(),
-                ),
-              if (gameState.hasCompass)
-                _buildSpecialItemUseButton(
-                  context,
-                  'The Compass',
-                  gameState.canUseCompass(),
-                  gameState.compassLastUsed != null
-                      ? 'Cooldown: ${3 - DateTime.now().difference(gameState.compassLastUsed!).inMinutes} min'
-                      : 'Ready',
-                  Icons.explore,
-                  Colors.indigo.shade700,
-                  () => _useCompass(),
-                ),
-              if (gameState.hasLantern)
-                _buildSpecialItemUseButton(
-                  context,
-                  'The Lantern',
-                  gameState.canUseLantern(),
-                  gameState.lanternLastUsed != null
-                      ? 'Cooldown: ${10 - DateTime.now().difference(gameState.lanternLastUsed!).inMinutes} min'
-                      : 'Ready',
-                  Icons.light_mode,
-                  Colors.orange.shade700,
-                  () => _useLantern(),
-                ),
-            ],
-          ),
       ],
     );
   }
@@ -1065,18 +963,23 @@ class _LastLightScreenState extends State<LastLightScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(icon, size: 20, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                Flexible(
+                  child: Row(
+                    children: [
+                      Icon(icon, size: 20, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 if (indicator != null)
                   Container(
@@ -1324,26 +1227,26 @@ class _LastLightScreenState extends State<LastLightScreen> {
           ),
           // Content
           Expanded(
-            child: DefaultTabController(
-              length: 2,
-              child: Column(
-                children: [
-                  const TabBar(
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.grey,
-                    indicatorColor: Colors.blue,
-                    tabs: [
-                      Tab(text: 'Soul Purchases'),
-                      Tab(text: 'Premium Shop'),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        // Soul Purchases Tab
-                        ListView(
-                          padding: const EdgeInsets.all(16),
-                          children: [
+            child: Column(
+              children: [
+                TabBar(
+                  controller: _shopTabController,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey,
+                  indicatorColor: Colors.blue,
+                  tabs: const [
+                    Tab(text: 'Soul Purchases'),
+                    Tab(text: 'Premium Shop'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _shopTabController,
+                    children: [
+                      // Soul Purchases Tab
+                      ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
                             const Text(
                               'Special Items can be purchased here or from the Special Items drawer.',
                               style: TextStyle(color: Colors.white70, fontSize: 14),
@@ -1361,7 +1264,6 @@ class _LastLightScreenState extends State<LastLightScreen> {
                                 gameState.souls >= 1000,
                                 () {
                                   _buyUpgrade('mirror');
-                                  setState(() {});
                                 },
                                 isSoul: true,
                               ),
@@ -1376,7 +1278,6 @@ class _LastLightScreenState extends State<LastLightScreen> {
                                 gameState.souls >= 1500,
                                 () {
                                   _buyUpgrade('compass');
-                                  setState(() {});
                                 },
                                 isSoul: true,
                               ),
@@ -1391,16 +1292,15 @@ class _LastLightScreenState extends State<LastLightScreen> {
                                 gameState.souls >= 2000,
                                 () {
                                   _buyUpgrade('lantern');
-                                  setState(() {});
                                 },
                                 isSoul: true,
                               ),
-                          ],
-                        ),
-                        // Premium Shop Tab
-                        ListView(
-                          padding: const EdgeInsets.all(16),
-                          children: [
+                        ],
+                      ),
+                      // Premium Shop Tab
+                      ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
                             const Text(
                               'Support The Light',
                               style: TextStyle(
@@ -1467,175 +1367,171 @@ class _LastLightScreenState extends State<LastLightScreen> {
                 ],
               ),
             ),
-          ),
         ],
       ),
     );
   }
   
   Widget _buildSpecialItemsDrawer(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.5,
-      maxChildSize: 0.9,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.95),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade600,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+    final screenHeight = MediaQuery.of(context).size.height;
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Container(
+        height: screenHeight * 0.7,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.95),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade600,
+                borderRadius: BorderRadius.circular(2),
               ),
-              // Title
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
+            ),
+            // Title
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Special Items',
+                    style: TextStyle(
+                      fontSize: 24,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => showSpecialItems = false),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.grey),
+            // Content
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // Purchase section
+                  if (!gameState.hasMirror ||
+                      !gameState.hasCompass ||
+                      !gameState.hasLantern) ...[
                     const Text(
-                      'Special Items',
+                      'Available Items',
                       style: TextStyle(
-                        fontSize: 24,
+                        fontSize: 18,
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => setState(() => showSpecialItems = false),
-                      icon: const Icon(Icons.close, color: Colors.white),
+                    const SizedBox(height: 8),
+                    if (!gameState.hasMirror)
+                      _buildSpecialItemButton(
+                        context,
+                        'The Mirror',
+                        'See your reflection, gain insight',
+                        'Cost: 1000 souls',
+                        Icons.auto_awesome,
+                        Colors.amber.shade900,
+                        gameState.souls >= 1000,
+                        () {
+                          _buyUpgrade('mirror');
+                          setState(() {});
+                        },
+                      ),
+                    if (!gameState.hasCompass)
+                      _buildSpecialItemButton(
+                        context,
+                        'The Compass',
+                        'Find direction, quiet the voices',
+                        'Cost: 1500 souls',
+                        Icons.explore,
+                        Colors.indigo.shade900,
+                        gameState.souls >= 1500,
+                        () {
+                          _buyUpgrade('compass');
+                          setState(() {});
+                        },
+                      ),
+                    if (!gameState.hasLantern)
+                      _buildSpecialItemButton(
+                        context,
+                        'The Lantern',
+                        'Hope that never fully dies',
+                        'Cost: 2000 souls',
+                        Icons.light_mode,
+                        Colors.orange.shade900,
+                        gameState.souls >= 2000,
+                        () {
+                          _buyUpgrade('lantern');
+                          setState(() {});
+                        },
+                      ),
+                    const SizedBox(height: 24),
+                  ],
+                  // Usage section
+                  if (gameState.hasMirror || gameState.hasCompass || gameState.hasLantern) ...[
+                    const Text(
+                      'Use Items',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ],
-                ),
-              ),
-              const Divider(color: Colors.grey),
-              // Content
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    // Purchase section
-                    if (!gameState.hasMirror ||
-                        !gameState.hasCompass ||
-                        !gameState.hasLantern) ...[
-                      const Text(
-                        'Available Items',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    const SizedBox(height: 8),
+                    if (gameState.hasMirror)
+                      _buildSpecialItemUseButton(
+                        context,
+                        'The Mirror',
+                        gameState.canUseMirror(),
+                        gameState.mirrorLastUsed != null
+                            ? 'Cooldown: ${5 - DateTime.now().difference(gameState.mirrorLastUsed!).inMinutes} min'
+                            : 'Ready',
+                        Icons.auto_awesome,
+                        Colors.amber.shade700,
+                        () => _useMirror(),
                       ),
-                      const SizedBox(height: 8),
-                      if (!gameState.hasMirror)
-                        _buildSpecialItemButton(
-                          context,
-                          'The Mirror',
-                          'See your reflection, gain insight',
-                          'Cost: 1000 souls',
-                          Icons.auto_awesome,
-                          Colors.amber.shade900,
-                          gameState.souls >= 1000,
-                          () {
-                            _buyUpgrade('mirror');
-                            setState(() {});
-                          },
-                        ),
-                      if (!gameState.hasCompass)
-                        _buildSpecialItemButton(
-                          context,
-                          'The Compass',
-                          'Find direction, quiet the voices',
-                          'Cost: 1500 souls',
-                          Icons.explore,
-                          Colors.indigo.shade900,
-                          gameState.souls >= 1500,
-                          () {
-                            _buyUpgrade('compass');
-                            setState(() {});
-                          },
-                        ),
-                      if (!gameState.hasLantern)
-                        _buildSpecialItemButton(
-                          context,
-                          'The Lantern',
-                          'Hope that never fully dies',
-                          'Cost: 2000 souls',
-                          Icons.light_mode,
-                          Colors.orange.shade900,
-                          gameState.souls >= 2000,
-                          () {
-                            _buyUpgrade('lantern');
-                            setState(() {});
-                          },
-                        ),
-                      const SizedBox(height: 24),
-                    ],
-                    // Usage section
-                    if (gameState.hasMirror || gameState.hasCompass || gameState.hasLantern) ...[
-                      const Text(
-                        'Use Items',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    if (gameState.hasCompass)
+                      _buildSpecialItemUseButton(
+                        context,
+                        'The Compass',
+                        gameState.canUseCompass(),
+                        gameState.compassLastUsed != null
+                            ? 'Cooldown: ${3 - DateTime.now().difference(gameState.compassLastUsed!).inMinutes} min'
+                            : 'Ready',
+                        Icons.explore,
+                        Colors.indigo.shade700,
+                        () => _useCompass(),
                       ),
-                      const SizedBox(height: 8),
-                      if (gameState.hasMirror)
-                        _buildSpecialItemUseButton(
-                          context,
-                          'The Mirror',
-                          gameState.canUseMirror(),
-                          gameState.mirrorLastUsed != null
-                              ? 'Cooldown: ${5 - DateTime.now().difference(gameState.mirrorLastUsed!).inMinutes} min'
-                              : 'Ready',
-                          Icons.auto_awesome,
-                          Colors.amber.shade700,
-                          () => _useMirror(),
-                        ),
-                      if (gameState.hasCompass)
-                        _buildSpecialItemUseButton(
-                          context,
-                          'The Compass',
-                          gameState.canUseCompass(),
-                          gameState.compassLastUsed != null
-                              ? 'Cooldown: ${3 - DateTime.now().difference(gameState.compassLastUsed!).inMinutes} min'
-                              : 'Ready',
-                          Icons.explore,
-                          Colors.indigo.shade700,
-                          () => _useCompass(),
-                        ),
-                      if (gameState.hasLantern)
-                        _buildSpecialItemUseButton(
-                          context,
-                          'The Lantern',
-                          gameState.canUseLantern(),
-                          gameState.lanternLastUsed != null
-                              ? 'Cooldown: ${10 - DateTime.now().difference(gameState.lanternLastUsed!).inMinutes} min'
-                              : 'Ready',
-                          Icons.light_mode,
-                          Colors.orange.shade700,
-                          () => _useLantern(),
-                        ),
-                    ],
+                    if (gameState.hasLantern)
+                      _buildSpecialItemUseButton(
+                        context,
+                        'The Lantern',
+                        gameState.canUseLantern(),
+                        gameState.lanternLastUsed != null
+                            ? 'Cooldown: ${10 - DateTime.now().difference(gameState.lanternLastUsed!).inMinutes} min'
+                            : 'Ready',
+                        Icons.light_mode,
+                        Colors.orange.shade700,
+                        () => _useLantern(),
+                      ),
                   ],
-                ),
+                ],
               ),
-            ],
-          ),
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
   
