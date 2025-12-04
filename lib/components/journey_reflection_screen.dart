@@ -4,11 +4,13 @@ import '../models/game_state.dart';
 class JourneyReflectionScreen extends StatelessWidget {
   final GameState gameState;
   final VoidCallback onClose;
+  final VoidCallback? onReset;
 
   const JourneyReflectionScreen({
     super.key,
     required this.gameState,
     required this.onClose,
+    this.onReset,
   });
 
   String _getContextualText() {
@@ -54,9 +56,53 @@ class JourneyReflectionScreen extends StatelessWidget {
                       letterSpacing: 2,
                     ),
                   ),
-                  IconButton(
-                    onPressed: onClose,
-                    icon: const Icon(Icons.close, color: Colors.white70),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (onReset != null)
+                        IconButton(
+                          onPressed: () {
+                            // Show confirmation dialog
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor: Colors.grey.shade900,
+                                title: const Text(
+                                  'Reset Game?',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                content: const Text(
+                                  'This will permanently delete all progress, including cycles, memories, and statistics. This cannot be undone.',
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pop(),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      onReset!();
+                                      onClose();
+                                    },
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                    ),
+                                    child: const Text('Reset'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.refresh, color: Colors.red),
+                          tooltip: 'Reset Game',
+                        ),
+                      IconButton(
+                        onPressed: onClose,
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                      ),
+                    ],
                   ),
                 ],
               ),

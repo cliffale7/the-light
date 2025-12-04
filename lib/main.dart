@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' show ImageFilter;
 import 'package:flame/game.dart';
 import 'dart:async';
 import 'dart:math';
@@ -43,6 +44,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
   bool showJourneyReflection = false;
   bool showSpecialItems = false;
   bool showShop = false;
+  bool isPaused = false; // Pause flag for sacrifice ritual
   late TabController _shopTabController;
 
   @override
@@ -69,7 +71,12 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
   void _startGameTimer() {
     // Game update loop
     gameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (mounted && !gameState.isRebirthing) {
+      // Pause game during sacrifice ritual
+      final isSacrificeActive = gameState.isShowingMemoryPreview || 
+                                gameState.isShowingSacrificeConfirmation || 
+                                gameState.isShowingSacrificeAftermath;
+      
+      if (mounted && !gameState.isRebirthing && !isSacrificeActive) {
         setState(() {
           final phaseTransitioned = gameState.updateLight(0.1);
           game.updateLightPercent(gameState.lightPercent);
@@ -181,6 +188,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
     setState(() {
       gameState.isShowingMemoryPreview = false;
       gameState.isShowingSacrificeConfirmation = true;
+      isPaused = true; // Pause game
     });
   }
 
@@ -195,6 +203,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
   void _cancelSacrifice() {
     setState(() {
       gameState.cancelSacrifice();
+      isPaused = false; // Resume game
     });
   }
 
@@ -207,6 +216,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
       if (mounted) {
         setState(() {
           gameState.showMemory = null;
+          isPaused = false; // Resume game after aftermath
         });
       }
     });
@@ -216,6 +226,21 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
     setState(() {
       gameState.isRebirthing = true;
     });
+  }
+
+  void _resetGame() async {
+    // Show confirmation is handled in JourneyReflectionScreen
+    // This method is called after confirmation
+    setState(() {
+      gameState.reset();
+      game.updateLightPercent(gameState.lightPercent);
+    });
+    
+    // Clear save data
+    await SaveService.clearSaveData();
+    
+    // Save the reset state
+    _saveGameState();
   }
 
   Future<void> _saveGameState() async {
@@ -340,54 +365,23 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
                 ),
               ),
 
-            // Whispers with enhanced visual effects
-            ...gameState.whispers.asMap().entries.map((entry) {
-              final index = entry.key;
-              final whisper = entry.value;
-              final phase = gameState.phase;
-              final intensity = (phase / 4.0).clamp(0.0, 1.0);
+            // Whispers - elegantly integrated below header (hidden during sacrifice ritual)
+            if (gameState.whispers.isNotEmpty && 
+                !gameState.isShowingMemoryPreview && 
+                !gameState.isShowingSacrificeConfirmation && 
+                !gameState.isShowingSacrificeAftermath)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 120,
+                left: 12,
+                right: 12,
+                child: _buildWhisperDisplay(context, gameState.whispers.first, gameState.phase),
+              ),
 
-              return Positioned(
-                top: MediaQuery.of(context).padding.top + 60 + (index * 30),
-                left: 16,
-                right: 16,
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  duration: const Duration(milliseconds: 1000),
-                  builder: (context, value, child) {
-                    return Opacity(
-                      opacity: value,
-                      child: Text(
-                        whisper,
-                        style: TextStyle(
-                          color: Color.lerp(
-                            Colors.red.shade500,
-                            Colors.red.shade900,
-                            intensity,
-                          ),
-                          fontSize: 16 + (intensity * 2),
-                          fontWeight: FontWeight.w400,
-                          shadows: [
-                            Shadow(
-                              color: Colors.red.shade900.withValues(
-                                alpha: 0.5 * intensity,
-                              ),
-                              blurRadius: 4 * intensity,
-                            ),
-                          ],
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  },
-                ),
-              );
-            }),
-
-            // Memory display
-            if (gameState.showMemory != null)
+            // Memory display (hidden during sacrifice ritual)
+            if (gameState.showMemory != null && 
+                !gameState.isShowingMemoryPreview && 
+                !gameState.isShowingSacrificeConfirmation && 
+                !gameState.isShowingSacrificeAftermath)
               Positioned(
                 top: MediaQuery.of(context).size.height * 0.33,
                 left: 0,
@@ -411,11 +405,15 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
                 child: JourneyReflectionScreen(
                   gameState: gameState,
                   onClose: _toggleJourneyReflection,
+                  onReset: _resetGame,
                 ),
               ),
 
-            // Main UI
-            if (!showJourneyReflection && !showShop)
+            // Main UI (hidden during sacrifice ritual)
+            if (!showJourneyReflection && !showShop && 
+                !gameState.isShowingMemoryPreview && 
+                !gameState.isShowingSacrificeConfirmation && 
+                !gameState.isShowingSacrificeAftermath)
               Positioned.fill(
                 child: SafeArea(
                   child: SingleChildScrollView(
@@ -457,9 +455,13 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
                           ],
                         ),
 
-                        // Story text (compact)
-                        const SizedBox(height: 4),
-                        _buildStoryText(context, compact: true),
+                        // Story text (compact) - hidden during sacrifice ritual
+                        if (!gameState.isShowingMemoryPreview && 
+                            !gameState.isShowingSacrificeConfirmation && 
+                            !gameState.isShowingSacrificeAftermath) ...[
+                          const SizedBox(height: 4),
+                          _buildStoryText(context, compact: true),
+                        ],
                       ],
                     ),
                   ),
@@ -490,160 +492,317 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildStats(BuildContext context) {
-    final lightPercent = gameState.lightPercent;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.local_fire_department,
-                  size: 18,
-                  color: HSLColor.fromAHSL(
-                    1.0,
-                    45,
-                    1.0,
-                    lightPercent / 100,
-                  ).toColor(),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${gameState.light.floor()}/${gameState.maxLight.floor()}',
-                  style: const TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                if (gameState.rebornCount > 0)
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.wb_sunny,
-                        size: 16,
-                        color: Colors.yellow.shade400,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${gameState.rebornCount}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                  ),
-                // Store button
-                IconButton(
-                  onPressed: () => setState(() => showShop = true),
-                  icon: Icon(
-                    Icons.store,
-                    color: Colors.blue.shade300,
-                    size: 20,
-                  ),
-                  tooltip: 'Store',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                const SizedBox(width: 4),
-                // Special Items button
-                IconButton(
-                  onPressed: () => setState(() => showSpecialItems = true),
-                  icon: Stack(
-                    children: [
-                      Icon(
-                        Icons.inventory_2,
-                        color: Colors.purple.shade300,
-                        size: 20,
-                      ),
-                      if (gameState.hasMirror || gameState.hasCompass || gameState.hasLantern)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Colors.orange,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  tooltip: 'Special Items',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                const SizedBox(width: 4),
-                // Your Journey button
-                IconButton(
-                  onPressed: _toggleJourneyReflection,
-                  icon: Icon(
-                    Icons.local_florist,
-                    color: Colors.yellow.shade300,
-                    size: 20,
-                  ),
-                  tooltip: 'Your Journey',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: 12,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade800,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: lightPercent / 100,
+  Widget _buildWhisperDisplay(BuildContext context, String whisper, int phase) {
+    final intensity = (phase / 4.0).clamp(0.0, 1.0);
+    final whisperColor = Color.lerp(
+      Colors.red.shade500,
+      Colors.red.shade900,
+      intensity,
+    ) ?? Colors.red.shade500;
+    
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 1500),
+      curve: Curves.easeOut,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 10),
             child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    HSLColor.fromAHSL(1.0, 45, 1.0, 0.7).toColor(),
-                    HSLColor.fromAHSL(1.0, 30, 1.0, 0.5).toColor(),
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: whisperColor.withValues(alpha: 0.4),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: whisperColor.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Text(
+                whisper,
+                style: TextStyle(
+                  color: whisperColor,
+                  fontSize: 15 + (intensity * 2),
+                  fontWeight: FontWeight.w400,
+                  fontStyle: FontStyle.italic,
+                  letterSpacing: 0.5,
+                  shadows: [
+                    Shadow(
+                      color: whisperColor.withValues(alpha: 0.6),
+                      blurRadius: 8,
+                    ),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(6),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStats(BuildContext context) {
+    final lightPercent = gameState.lightPercent;
+    final lightColor = HSLColor.fromAHSL(
+      1.0,
+      45,
+      1.0,
+      (lightPercent / 100).clamp(0.3, 1.0),
+    ).toColor();
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: lightColor.withValues(alpha: 0.3),
+          width: 1,
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Icon(Icons.favorite, size: 16, color: Colors.blue.shade400),
-            const SizedBox(width: 6),
-            Text(
-              'Souls: ${gameState.souls.floor()}',
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ],
-        ),
-        if (gameState.phase > 0) ...[
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(Icons.warning, size: 16, color: Colors.red.shade400),
-              const SizedBox(width: 6),
-              Text(
-                'Phase: ${gameState.phase}',
-                style: TextStyle(color: Colors.red.shade400, fontSize: 14),
-              ),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: lightColor.withValues(alpha: 0.2),
+            blurRadius: 20,
+            spreadRadius: 2,
           ),
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header row with light value and action buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Light value with animated flame icon
+                    Row(
+                      children: [
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          duration: const Duration(milliseconds: 1500),
+                          curve: Curves.easeInOut,
+                          builder: (context, value, child) {
+                            return Transform.scale(
+                              scale: 0.9 + (sin(value * 2 * pi) * 0.1),
+                              child: Icon(
+                                Icons.local_fire_department,
+                                size: 24,
+                                color: lightColor,
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${gameState.light.floor()}/${gameState.maxLight.floor()}',
+                          style: TextStyle(
+                            fontSize: 24,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            shadows: [
+                              Shadow(
+                                color: lightColor.withValues(alpha: 0.5),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Action buttons
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (gameState.rebornCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.yellow.shade400.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.yellow.shade400.withValues(alpha: 0.5),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.wb_sunny,
+                                  size: 14,
+                                  color: Colors.yellow.shade400,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${gameState.rebornCount}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.yellow.shade400,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(width: 6),
+                        _buildHeaderIconButton(
+                          icon: Icons.store,
+                          color: Colors.blue.shade300,
+                          onPressed: () => setState(() => showShop = true),
+                          tooltip: 'Store',
+                        ),
+                        const SizedBox(width: 4),
+                        _buildHeaderIconButton(
+                          icon: Icons.inventory_2,
+                          color: Colors.purple.shade300,
+                          onPressed: () => setState(() => showSpecialItems = true),
+                          tooltip: 'Special Items',
+                          hasNotification: gameState.hasMirror || gameState.hasCompass || gameState.hasLantern,
+                        ),
+                        const SizedBox(width: 4),
+                        _buildHeaderIconButton(
+                          icon: Icons.local_florist,
+                          color: Colors.yellow.shade300,
+                          onPressed: _toggleJourneyReflection,
+                          tooltip: 'Your Journey',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Light progress bar
+                Container(
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade900,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: lightPercent / 100,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            lightColor,
+                            HSLColor.fromAHSL(1.0, 30, 1.0, 0.6).toColor(),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: [
+                          BoxShadow(
+                            color: lightColor.withValues(alpha: 0.6),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Stats row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.favorite, size: 16, color: Colors.blue.shade400),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${gameState.souls.floor()}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (gameState.phase > 0)
+                      Row(
+                        children: [
+                          Icon(Icons.warning, size: 16, color: Colors.red.shade400),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Phase ${gameState.phase}',
+                            style: TextStyle(
+                              color: Colors.red.shade400,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderIconButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+    required String tooltip,
+    bool hasNotification = false,
+  }) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: color.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: IconButton(
+            onPressed: onPressed,
+            icon: Icon(icon, color: color, size: 18),
+            tooltip: tooltip,
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ),
+        if (hasNotification)
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black, width: 1),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -726,7 +885,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
               context,
               'Brighter Click',
               '+1 per click (Current: +${currentClickPower.toStringAsFixed(1)})',
-              'Cost: $clickCost souls',
+              'Cost: $clickCost soul',
               Icons.bolt,
               Colors.yellow.shade900,
               gameState.souls >= clickCost,
@@ -737,7 +896,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
             _buildUpgradeButton(
               context,
               'Soul Gatherer',
-              '+0.5 souls/sec',
+              '+0.5 soul/sec',
               'Cost: $autoCost souls',
               Icons.favorite,
               Colors.blue.shade900,
@@ -1104,7 +1263,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
             ),
             const SizedBox(height: 4),
             Text(
-              'Cost: 1000 souls | Rebirths grant permanent bonuses',
+              'Cost: 1000 soul | Rebirths grant permanent bonuses',
               style: TextStyle(fontSize: 10, color: Colors.grey.shade300),
               textAlign: TextAlign.center,
             ),
@@ -1439,7 +1598,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
                         context,
                         'The Mirror',
                         'See your reflection, gain insight',
-                        'Cost: 1000 souls',
+                        'Cost: 1000 soul',
                         Icons.auto_awesome,
                         Colors.amber.shade900,
                         gameState.souls >= 1000,
@@ -1453,7 +1612,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
                         context,
                         'The Compass',
                         'Find direction, quiet the voices',
-                        'Cost: 1500 souls',
+                        'Cost: 1500 soul',
                         Icons.explore,
                         Colors.indigo.shade900,
                         gameState.souls >= 1500,
@@ -1467,7 +1626,7 @@ class _LastLightScreenState extends State<LastLightScreen> with TickerProviderSt
                         context,
                         'The Lantern',
                         'Hope that never fully dies',
-                        'Cost: 2000 souls',
+                        'Cost: 2000 soul',
                         Icons.light_mode,
                         Colors.orange.shade900,
                         gameState.souls >= 2000,

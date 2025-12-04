@@ -106,9 +106,9 @@ class GameState {
 
   bool updateLight(double delta) {
     final oldPhase = phase;
-    // Slower decay: 0.3 + (phase * 0.15) instead of 0.5 + (phase * 0.2)
+    // Much gentler starting decay: 0.15 + (phase * 0.12) - makes early game manageable
     // Apply decay resistance
-    final baseDecay = 0.3 + (phase * 0.15);
+    final baseDecay = 0.15 + (phase * 0.12);
     var decay = baseDecay * (1 - decayResistance.clamp(0.0, 0.5));
     
     // Lantern grace period: 50% decay reduction for 30 seconds after use
@@ -376,6 +376,49 @@ class GameState {
       isShowingSacrificeConfirmation = false;
       isShowingSacrificeAftermath = false;
     }
+  }
+
+  /// Reset the game to initial state - clears ALL progress including persistent data
+  void reset() {
+    light = 100.0;
+    maxLight = 100.0;
+    souls = 1000.0;
+    gems = 0;
+    clickPower = 1.0;
+    autoGather = 0.0;
+    decayResistance = 0.0;
+    memoryResonance = 0.0;
+    phaseStability = 0;
+    phase = 4;
+    memories.clear();
+    showMemory = null;
+    sacrifices = 0;
+    darkness = 0.0;
+    whispers.clear();
+    rebornCount = 0;
+    isRebirthing = false;
+    
+    // Special Items
+    hasMirror = false;
+    hasCompass = false;
+    hasLantern = false;
+    mirrorLastUsed = null;
+    compassLastUsed = null;
+    lanternLastUsed = null;
+    
+    // Memory resonance tracking
+    memoryResonanceProgress = 0.0;
+    
+    // Persistent tracking - also reset
+    allSacrificedMemories.clear();
+    totalMemoriesSacrificed = 0;
+    totalMemoriesPreserved = 0;
+    
+    // Sacrifice ritual state
+    memoryToSacrifice = null;
+    isShowingMemoryPreview = false;
+    isShowingSacrificeConfirmation = false;
+    isShowingSacrificeAftermath = false;
   }
 
   void addWhisper() {
